@@ -15,6 +15,13 @@ function retryableConnectionError(error) {
 
 export async function withActor(userId, callback) {
   if (!userId) throw new Error('An acting user is required for this database operation.');
+  return withTransaction(async (client) => {
+    await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
+    return callback(client);
+  });
+}
+
+export async function withTransaction(callback) {
   let client;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try { client = await pool.connect(); break; }
@@ -26,7 +33,6 @@ export async function withActor(userId, callback) {
   if (!client) throw new Error('Could not connect to PostgreSQL.');
   try {
     await client.query('BEGIN');
-    await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
     const result = await callback(client);
     await client.query('COMMIT');
     return result;
