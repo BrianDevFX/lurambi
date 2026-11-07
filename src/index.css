@@ -61,3 +61,34 @@ legend { padding: 0 .3rem; color: #475569; font-size: .85rem; }
 .privacy { width: min(100%, 44rem); display: grid; gap: 1rem; }
 .privacy p { line-height: 1.55; }
 @media (max-width: 540px) { .form-grid { grid-template-columns: 1fr; } .content { padding: .75rem; } .search-row { align-items: stretch; } .bottom-tabs button { font-size: .69rem; } }
+
+/* Admin screens: responsive navigation, filters and actions. */
+.admin-mobile-nav { display: none; }
+.admin-workspace .content { padding: clamp(.75rem, 2.5vw, 1.5rem); }
+.admin-workspace .filter-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); align-items: end; }
+.admin-workspace .action-row, .admin-workspace .reset-row { flex-wrap: wrap; align-items: stretch; }
+.admin-workspace .action-row button, .admin-workspace .topbar button { min-height: 2.75rem; }
+.admin-workspace .reset-row input { min-width: min(100%, 14rem); }
+.admin-workspace .cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.admin-workspace .table-scroll { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; border-radius: .4rem; }
+.admin-workspace .table-scroll th, .admin-workspace .table-scroll td { overflow-wrap: anywhere; }
+.admin-workspace details > summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .admin-workspace { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .admin-workspace .role-tabs { display: none; }
+  .admin-workspace .admin-mobile-nav { position: sticky; top: 4.1rem; z-index: 2; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .75rem; padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0; background: #fff; }
+  .admin-workspace .admin-mobile-nav select { min-height: 2.75rem; }
+  .admin-workspace .content { padding: .75rem; }
+  .admin-workspace .panel { padding: 1rem; }
+  .admin-workspace .action-row > button { flex: 1 1 9rem; }
+  .admin-workspace .user-heading { align-items: flex-start; flex-wrap: wrap; }
+  .admin-workspace .table-scroll table { min-width: 38rem; }
+}
+
+@media (max-width: 420px) {
+  .admin-workspace .topbar { padding: .6rem .7rem; }
+  .admin-workspace .topbar strong { font-size: .9rem; }
+  .admin-workspace .topbar small { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-workspace .admin-mobile-nav { top: 3.6rem; }
+}

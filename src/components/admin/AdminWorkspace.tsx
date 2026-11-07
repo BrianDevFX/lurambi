@@ -11,9 +11,10 @@ export function AdminWorkspace({ user, onSignOut }: Props) {
   const [tab,setTab] = useState('Dashboard');
   const adminTabs=['Dashboard','Mobilizers','Entries','Flags','Verification','Import/Export','Places','Network','Data Requests','Audit Log','Settings'];
   const tabs=user.role==='admin'?adminTabs:['Dashboard','Mobilizers','Entries'];
-  return <main className="workspace">
+  return <main className="workspace admin-workspace">
     <header className="topbar"><div><strong>Lurambi Field Platform</strong><small>{user.full_name} · {user.role === 'admin' ? 'Admin' : 'Ward Coordinator'}</small></div><button className="quiet-button" onClick={onSignOut}>Sign out</button></header>
-    <nav className="role-tabs">{tabs.map(item=><button key={item} className={tab===item?'active':''} onClick={() => setTab(item)}>{item}</button>)}</nav>
+    <nav className="role-tabs" aria-label="Workspace navigation">{tabs.map(item=><button key={item} className={tab===item?'active':''} aria-current={tab===item?'page':undefined} onClick={() => setTab(item)}>{item}</button>)}</nav>
+    <label className="admin-mobile-nav">Section<select aria-label="Workspace section" value={tab} onChange={event=>setTab(event.target.value)}>{tabs.map(item=><option key={item}>{item}</option>)}</select></label>
     <section className="content">{tab==='Dashboard'?<Dashboard role={user.role}/>:tab === 'Mobilizers' ? <Mobilizers user={user}/> : tab==='Entries' ? <Entries canEdit={user.role==='admin'}/> : <AdminTools tab={tab}/>}</section>
   </main>;
 }
