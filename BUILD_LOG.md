@@ -118,6 +118,7 @@
 - DSR actions update request status/notes but do not automatically mutate supporter records. Dashboard coverage does not yet calculate register-size coverage from loaded register rows. Dashboard and import/export panels still have the Phase C limitations above.
 - The privacy notice and consent wording need campaign review. This branch is not ready for real supporter data until the security backlog, data workflows, and deployed smoke test are reviewed.
 - The configured `origin` URL is `https://github.com/BrianDevFX/lurambi.git`. It contains the clean Phase A history, but its repository name differs from the requested `lurambi-field-platform`; verify it is the intended private target before pushing this phase.
+- Push attempt for `build/phase-d` was rejected by automatic approval review because the configured GitHub destination did not match the requested new repository name and its privacy was unverified. No remote was changed and no push was completed.
 
 ### HUMAN STEPS
 
