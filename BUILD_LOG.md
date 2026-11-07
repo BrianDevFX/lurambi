@@ -127,6 +127,13 @@
 - Test `/api/health`, all three roles, public join and DSR, admin audit, exports, and the PWA on a 360px phone viewport. Toggle network offline/online and verify a no-ID draft syncs and retains errors; verify ID-bearing capture waits until online.
 - Review the hardening backlog before any live data. Do not run the synthetic seed on shared or production databases.
 
+## Mobilizer search bug fix
+
+- Replaced the search route's dependency on `app.search_my_entries` with a parameterized query against `public.entries`, scoped to the authenticated mobilizer ID. It supports name/phone search and exact 7–8 digit ID search, returns place labels required by the list UI, remains capped at 10 rows, and selects only masked IDs.
+- Added API regression checks for search results, place labels, owner scoping, exact National ID search, and absence of full National IDs from responses.
+- `npm test`: PASS — 32 tests against disposable localhost PostgreSQL. `npm run lint` and `npm run build`: PASS.
+- Likely production cause: the deployed database may not have the Phase B search function migration, causing the route to return a generic 500. The replacement removes that specific function dependency; production was not queried or changed.
+
 ### Phase D follow-up — 2026-11-07
 
 - After the repository owner confirmed `BrianDevFX/lurambi.git` is the intended public repository, pushed `build/phase-d` at commit `5c23b0ea7ff2e2438d8a6f8d39202c6a002f8de4`. Remote and local branch hashes match; no merge was performed.

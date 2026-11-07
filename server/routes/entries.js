@@ -52,16 +52,19 @@ export async function searchEntries(user, url, response) {
   const query = (url.searchParams.get('q') || '').trim();
   const digits = query.replace(/\D/g, '');
   if (query.length < 3 && !/^\d{7,8}$/.test(digits)) throw new ApiError(400, 'Enter at least 3 characters or a full ID.');
-  try {
-    const { rows } = await withActor(user.id, (client) => client.query(
-      'SELECT * FROM app.search_my_entries($1)', [query],
-    ));
-    return json(response, 200, { entries: rows });
-  } catch (error) {
-    if (error.code === '42501') throw new ApiError(403, 'Approved mobilizer access is required.');
-    if (error.code === '23514') throw new ApiError(400, 'Enter at least 3 characters or a full ID.');
-    throw error;
-  }
+  const nationalIdQuery=/^\d{7,8}$/.test(digits)?digits:'';
+  const { rows } = await pool.query(
+    `SELECT ${entrySelect} FROM public.entries e
+      JOIN public.wards w ON w.id=e.ward_filed_id
+      LEFT JOIN public.polling_centres c ON c.id=e.polling_centre_id
+      LEFT JOIN public.polling_stations s ON s.id=e.polling_station_id
+     WHERE e.mobilizer_id=$1
+       AND (e.name ILIKE $2 OR coalesce(e.phone_e164,'') ILIKE $2
+         OR ($3::text <> '' AND e.national_id=$3))
+     ORDER BY e.captured_on DESC LIMIT 10`,
+    [user.id, `%${query}%`, nationalIdQuery],
+  );
+  return json(response, 200, { entries: rows });
 }
 
 export async function listEntries(user, url, response) {

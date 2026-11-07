@@ -169,6 +169,16 @@ describe('Phase B API smoke', () => {
     expect(sharedPhone.response.status).toBe(201); expect(sharedPhone.result.entry.flags).toContain('SHARED_PHONE');
     const own = await request('/api/entries/mine',{cookie:mobilizerCookie});
     expect(own.result.entries).toHaveLength(2);
+    const search = await request('/api/entries/search?q=Synthetic%20Supporter',{cookie:mobilizerCookie});
+    expect(search.response.status).toBe(200);
+    expect(search.result.entries).toHaveLength(2);
+    expect(search.result.entries.every((entry)=>entry.ward_name==='Sheywe'&&entry.polling_centre_name&&entry.station_name)).toBe(true);
+    expect(JSON.stringify(search.result)).not.toContain('1234567');
+    const idSearch = await request('/api/entries/search?q=1234567',{cookie:mobilizerCookie});
+    expect(idSearch.response.status).toBe(200);
+    expect(idSearch.result.entries).toHaveLength(1);
+    expect(idSearch.result.entries[0].national_id_masked).toBeTruthy();
+    expect(JSON.stringify(idSearch.result)).not.toContain('1234567');
     const otherList = await request('/api/entries/mine',{cookie:secondMobilizerCookie});
     expect(otherList.response.status).toBe(200); expect(otherList.result.entries).toHaveLength(0);
     const coordinatorList = await request('/api/entries',{cookie:coordinatorCookie});
