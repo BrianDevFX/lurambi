@@ -126,3 +126,9 @@
 - Before preview deployment, confirm the GitHub destination is the intended private repository. Configure only a separate development Neon database and Vercel preview; apply migrations `0001`–`0006` and create a synthetic test admin.
 - Test `/api/health`, all three roles, public join and DSR, admin audit, exports, and the PWA on a 360px phone viewport. Toggle network offline/online and verify a no-ID draft syncs and retains errors; verify ID-bearing capture waits until online.
 - Review the hardening backlog before any live data. Do not run the synthetic seed on shared or production databases.
+
+### Phase D follow-up — 2026-11-07
+
+- After the repository owner confirmed `BrianDevFX/lurambi.git` is the intended public repository, pushed `build/phase-d` at commit `5c23b0ea7ff2e2438d8a6f8d39202c6a002f8de4`. Remote and local branch hashes match; no merge was performed.
+- Replayed migrations `0001`–`0006` from an empty disposable localhost database. All six applied; a second run skipped all six.
+- The attempt to run migrations from `.env.local` was blocked by automatic review because the connection target was not identified as development/test. No remote database migration was run. To continue safely, configure an untracked `.env.test` with a dedicated development/test `DATABASE_URL` and rerun with `node --env-file=.env.test scripts/migrate.mjs`.
