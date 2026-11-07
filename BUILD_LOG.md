@@ -92,3 +92,36 @@
 - For local Phase C testing, use a local PostgreSQL database only, set local `DATABASE_URL` and `JWT_SECRET`, and run `npm run db:migrate`; use `npm run db:seed:dev` only for synthetic places in the local database.
 - Before any deployed preview test, push/review this branch, configure a separate Neon development database, apply migrations `0001` through `0005`, and use only a synthetic workbook.
 - Decide how legacy rows should be attributed without granting a login role to the pseudo-user. Campaign staff must also approve the consent text before captures.
+
+## Phase D — Public join, dashboard, offline and ship preparation
+
+- Added migration `0006_public_join_dashboard.sql` with a referral-attributed `app.public_join` database function. It validates the referrer, place hierarchy and consent, normalizes phone/ID, stores the ID with its masked form, computes duplicate/phone/register flags, logs blocked duplicate attempts, and records `source='self_registered'`. The public API returns the same generic success message for accepted and duplicate submissions.
+- Added the English/Kiswahili public `/join/<code>` page, pledge and consent checkboxes, Privacy Notice link, honeypot, `/dsr` request form, public generic-response endpoints, and admin DSR queue with audit-logged actions.
+- Added role-scoped real-data dashboard queries and panels for ward/station totals, support, verification, completeness, priority stations, mobilizer quality, issues, capture timeline and network contacts. Filters cover ward/place, mobilizer (admin), dates, support, status and source. Each panel has an Excel export logged through `app.log_export`.
+- Added an install manifest, service worker shell cache, and IndexedDB offline queue with reconnect sync and per-item saved/duplicate/error states. The queue explicitly rejects any draft with a National ID and never stores an `national_id` property; ID-bearing submissions need an online connection.
+- Added lazy loading for role and public-page components. XLSX stays dynamically imported. Updated README smoke checks and the hardening backlog.
+
+### Validation
+
+- `npm run lint`: PASS (`tsc --noEmit`).
+- `npm test`: PASS — 4 files, 32 tests, including local API tests for public join attribution/generic duplicate responses, DSR submission/action, dashboard role scoping, and offline ID stripping. The API tests used the disposable PostgreSQL instance on localhost and generated synthetic data only.
+- `npm run build`: PASS — main JS 225.88 kB (70.87 kB gzip); lazy XLSX chunk 491.99 kB (160.33 kB gzip); admin workspace 24.95 kB (6.24 kB gzip); mobilizer workspace 35.79 kB (12.51 kB gzip).
+- Migration `0006_public_join_dashboard.sql` applied locally; the subsequent migration run skipped it and all earlier migrations.
+- Static scan found no VITE/legacy secret-variable usage and no selected secret patterns in `dist/`. Vercel headers in config include `X-Content-Type-Options` and `Referrer-Policy`; no preview was contacted.
+- No Neon, Vercel account, production database, or real supporter data was accessed.
+
+### Known gaps
+
+- Deployed preview and mobile-device smoke tests were not run. PWA install and offline sync are covered by code/build and queue privacy tests only; a phone-width browser test with network toggling remains necessary.
+- Offline drafts with a National ID cannot be queued because the browser must never persist an ID. Mobilizers must retry those entries online.
+- Public join and DSR have Zod validation and honeypots but no CAPTCHA or rate limiting; those remain deliberately deferred in `HARDENING_BACKLOG.md`.
+- DSR actions update request status/notes but do not automatically mutate supporter records. Dashboard coverage does not yet calculate register-size coverage from loaded register rows. Dashboard and import/export panels still have the Phase C limitations above.
+- The privacy notice and consent wording need campaign review. This branch is not ready for real supporter data until the security backlog, data workflows, and deployed smoke test are reviewed.
+- The configured `origin` URL is `https://github.com/BrianDevFX/lurambi.git`. It contains the clean Phase A history, but its repository name differs from the requested `lurambi-field-platform`; verify it is the intended private target before pushing this phase.
+
+### HUMAN STEPS
+
+- Review/approve the Privacy Notice and consent text before any real capture.
+- Before preview deployment, confirm the GitHub destination is the intended private repository. Configure only a separate development Neon database and Vercel preview; apply migrations `0001`–`0006` and create a synthetic test admin.
+- Test `/api/health`, all three roles, public join and DSR, admin audit, exports, and the PWA on a 360px phone viewport. Toggle network offline/online and verify a no-ID draft syncs and retains errors; verify ID-bearing capture waits until online.
+- Review the hardening backlog before any live data. Do not run the synthetic seed on shared or production databases.

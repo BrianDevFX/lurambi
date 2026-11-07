@@ -1,0 +1,9 @@
+{
+  "name": "Lurambi Field Platform",
+  "short_name": "Lurambi Field",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#047857",
+  "icons": [{"src":"/icons/app.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

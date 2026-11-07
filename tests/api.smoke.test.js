@@ -26,6 +26,7 @@ let pendingCookie;
 let mobilizerId;
 let secondMobilizerId;
 let pendingId;
+let approvedReferral;
 const phones = ['+254700000001','+254700000002','+254700000003','+254700000004','+254700000005','+254700000006'];
 const names = ['Synthetic Phase B Admin','Synthetic Phase B Coordinator','Synthetic Phase B Mobilizer A','Synthetic Phase B Mobilizer B','Synthetic Phase B Pending','Synthetic Phase B Signup'];
 const passwords = Array.from({ length: 6 }, () => randomBytes(24).toString('base64url'));
@@ -63,6 +64,7 @@ describe('Phase B API smoke', () => {
     process.env.JWT_SECRET = randomBytes(48).toString('hex');
     client = new Client({ connectionString: databaseUrl });
     await client.connect();
+    await client.query("DELETE FROM public.data_subject_requests WHERE requester_name='Synthetic DSR Requester'");
     await client.query("DELETE FROM public.entries WHERE name='=Synthetic Imported Person'");
     await client.query('DELETE FROM public.exports_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
     await client.query('DELETE FROM public.imports WHERE created_by IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
@@ -113,6 +115,7 @@ describe('Phase B API smoke', () => {
     await new Promise((resolve) => server?.close(resolve));
     if (client) {
       await client.query("DELETE FROM public.entries WHERE name='=Synthetic Imported Person'");
+      await client.query("DELETE FROM public.data_subject_requests WHERE requester_name='Synthetic DSR Requester'");
       await client.query('DELETE FROM public.exports_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.imports WHERE created_by IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.audit_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
@@ -145,6 +148,7 @@ describe('Phase B API smoke', () => {
     expect(pendingCaptureViaSeed.response.status).toBe(403);
     const approval = await request(`/api/users/${pendingId}/approve`,{method:'POST',cookie:adminCookie});
     expect(approval.response.status).toBe(200); expect(approval.result.user.referral_code).toMatch(/^[A-Z2-9]{6}$/);
+    approvedReferral=approval.result.user.referral_code;
     const coordinatorPending = await request('/api/users/pending',{cookie:coordinatorCookie});
     expect(coordinatorPending.response.status).toBe(200);
 
@@ -200,5 +204,20 @@ describe('Phase B API smoke', () => {
     expect(exported.status).toBe(200);expect(await exported.text()).toContain("'=Synthetic Imported Person");
     const logged=await client.query("SELECT count(*)::int AS n FROM public.exports_log WHERE user_id=(SELECT id FROM public.users WHERE phone=$1) AND export_type='entries'",[phones[0]]);
     expect(logged.rows[0].n).toBeGreaterThan(0);
+  },60_000);
+
+  it.skipIf(!enabled)('accepts generic public join and DSR responses and scopes dashboard data',async()=>{
+    const joinBody={name:'Synthetic Public Join',phone:'0700000098',national_id:'4567890',ward_id:wardA,polling_centre_id:centreA,polling_station_id:stationA,pledge:true,consent:true,website:''};
+    const joined=await request(`/api/public/join/${approvedReferral}`,{method:'POST',body:joinBody});
+    expect(joined.response.status).toBe(200);expect(joined.result.message).toBeTruthy();
+    const stored=await client.query("SELECT source,mobilizer_id,support_level,consent_at,national_id_masked FROM public.entries WHERE national_id='4567890'");
+    expect(stored.rows[0].source).toBe('self_registered');expect(stored.rows[0].mobilizer_id).toBe(pendingId);expect(stored.rows[0].support_level).toBe('strong_supporter');expect(stored.rows[0].consent_at).toBeTruthy();expect(stored.rows[0].national_id_masked).not.toBe('4567890');
+    const duplicate=await request(`/api/public/join/${approvedReferral}`,{method:'POST',body:joinBody});
+    expect(duplicate.response.status).toBe(joined.response.status);expect(duplicate.result.message).toBe(joined.result.message);
+    const dsr=await request('/api/public/dsr',{method:'POST',body:{request_type:'access',requester_name:'Synthetic DSR Requester',phone:'0700000019',details:'Synthetic test request',website:''}});
+    expect(dsr.response.status).toBe(200);
+    const queue=await request('/api/dsr',{cookie:adminCookie});expect(queue.response.status).toBe(200);const requestRow=queue.result.requests.find((row)=>row.requester_name==='Synthetic DSR Requester');expect(requestRow).toBeTruthy();
+    const closed=await request(`/api/dsr/${requestRow.id}`,{method:'PATCH',cookie:adminCookie,body:{status:'completed',notes:'Synthetic request reviewed'}});expect(closed.response.status).toBe(200);
+    const dashboard=await request('/api/dashboard',{cookie:mobilizerCookie});expect(dashboard.response.status).toBe(200);expect(dashboard.result.data_completeness.total).toBe(2);expect(dashboard.result.totals_by_ward.every((row)=>row.id===wardA)).toBe(true);
   },60_000);
 });

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../../lib/api/client.js';
+import { listOfflineResults, queueOfflineEntry, syncOfflineEntries, type OfflineResult } from '../../lib/offline/queue';
 
 type User = { id: string; full_name: string; phone: string; role: string; status: string; home_ward_id?: string; referral_code?: string; national_id_masked?: string };
 type Place = { id: string; name: string; ward_id?: string; polling_centre_id?: string; station_number?: number };
@@ -29,6 +30,7 @@ function Capture({ user }: { user: User }) {
   const [matches, setMatches] = useState<Entry[]>([]);
   const [searched, setSearched] = useState(false);
   const [result, setResult] = useState<Entry | null>(null);
+  const [offlineResults,setOfflineResults]=useState<OfflineResult[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const requestId = useRef(crypto.randomUUID());
@@ -39,6 +41,8 @@ function Capture({ user }: { user: User }) {
       .then(([placeResult, policy]) => { setPlaces(placeResult); setConsent(policy); })
       .catch((cause) => setError(cause.message));
   }, []);
+
+  useEffect(()=>{let active=true;const refresh=async()=>{await syncOfflineEntries();const items=await listOfflineResults();if(active)setOfflineResults(items);};void refresh();window.addEventListener('online',refresh);return()=>{active=false;window.removeEventListener('online',refresh);};},[]);
 
   const centres = useMemo(() => places.centres.filter((item) => item.ward_id === form.ward_filed_id), [places.centres, form.ward_filed_id]);
   const stations = useMemo(() => places.stations.filter((item) => item.polling_centre_id === form.polling_centre_id), [places.stations, form.polling_centre_id]);
@@ -55,10 +59,15 @@ function Capture({ user }: { user: User }) {
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setResult(null);
     try {
-      const data = await api('/api/entries', { method: 'POST', body: { ...form, issues: form.issues, client_request_id: requestId.current } });
+      const payload={ ...form, issues: form.issues, client_request_id: requestId.current };
+      if(!navigator.onLine){await queueOfflineEntry(payload);setError('');setSearched(false);requestId.current=crypto.randomUUID();setOfflineResults(await listOfflineResults());return;}
+      const data = await api('/api/entries', { method: 'POST', body: payload });
       setResult(data.entry); setForm({ ...form, name: '', phone: '', national_id: '', notes: '', consent: false, issues: [], not_found_in_register: false });
       requestId.current = crypto.randomUUID();
     } catch (cause: any) {
+      if(cause instanceof TypeError&&!form.national_id.trim()){
+        try{await queueOfflineEntry({...form,issues:form.issues,client_request_id:requestId.current});setError('');setSearched(false);requestId.current=crypto.randomUUID();setOfflineResults(await listOfflineResults());return;}catch(queueError){setError((queueError as Error).message);}
+      }
       if (cause?.status === 409 && cause?.data?.duplicate) setError(`Duplicate blocked. Match: ${cause.data.existing.masked_name || 'name masked'} · ID ${cause.data.existing.national_id_masked || 'not available'}.`);
       else setError(cause instanceof Error ? cause.message : 'Could not save entry.');
     } finally { setBusy(false); }
@@ -84,6 +93,7 @@ function Capture({ user }: { user: User }) {
       {consent && <label className="consent"><input required type="checkbox" checked={form.consent} onChange={(e) => update('consent',e.target.checked)}/><span>{consent.text} <a href="/privacy" target="_blank" rel="noreferrer">Privacy Notice</a></span></label>}
       {error && <p role="alert" className="error">{error}</p>}
       {result && <p role="status" className="success">Saved. {result.flags?.length ? `Flags: ${result.flags.join(', ')}` : 'No flags.'}</p>}
+      {offlineResults.filter(item=>item.state!=='saved').map(item=><p key={item.client_request_id} role="status" className={item.state==='error'?'error':'muted'}>{item.state}: {item.message}</p>)}
       <button disabled={busy || !consent || !form.consent}>{busy ? 'Saving…' : 'Save entry'}</button>
     </form>}
     {error && !searched && <p role="alert" className="error">{error}</p>}
@@ -108,5 +118,6 @@ function MyLink({ user }: { user: User }) {
 }
 
 function Profile({ user }: { user: User }) {
-  return <section className="panel stack"><h1>Profile</h1><p><strong>{user.full_name}</strong></p><p>{user.phone}</p><p>ID {user.national_id_masked || 'Not available'}</p><p>Status: {user.status}</p></section>;
+  const [stats,setStats]=useState<any>(null);useEffect(()=>{api('/api/dashboard').then(setStats).catch(()=>undefined);},[]);
+  return <section className="panel stack"><h1>Profile</h1><p><strong>{user.full_name}</strong></p><p>{user.phone}</p><p>ID {user.national_id_masked || 'Not available'}</p><p>Status: {user.status}</p>{stats&&<section><h2>My activity</h2><p>Entries: {stats.data_completeness?.total||0} · ID recorded: {stats.data_completeness?.id_present||0} · Phone recorded: {stats.data_completeness?.phone_present||0}</p></section>}</section>;
 }

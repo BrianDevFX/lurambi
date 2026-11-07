@@ -8,6 +8,8 @@ import { approveUser, listUsers, pendingUsers, resetPassword, suspendUser } from
 import { auditLog, bulkVerification, contacts, flags, resolveFlag, setVerification, settings, updateContact, updateEntry, updateSetting, verificationQueue } from './routes/admin.js';
 import { createImport, dryRunImport, importBatch, importHistory, placeAliases, saveAlias } from './routes/imports.js';
 import { exportEntries, exportVerification } from './routes/exports.js';
+import { exportDashboard, getDashboard } from './routes/dashboard.js';
+import { listDsr, publicDsr, publicJoin, updateDsr } from './routes/public.js';
 
 const key = (method, path) => `${method.toUpperCase()} ${path}`;
 const staticRoutes = new Map([
@@ -50,6 +52,9 @@ export async function route(request,response) {
     if (pathname === '/api/login' && method === 'POST') return await login(request,response);
     if (pathname === '/api/logout' && method === 'POST') return await logout(request,response);
     if (pathname === '/api/me' && method === 'GET') return await me(request,response);
+    if (pathname === '/api/public/dsr' && method === 'POST') return await publicDsr(request,request,response);
+    const joinMatch=pathname.match(/^\/api\/public\/join\/([A-Z2-9]{6})$/i);
+    if(joinMatch && method==='POST')return await publicJoin(request,request,response,joinMatch[1]);
 
     const user = await currentUser(request);
     const handler = staticRoutes.get(key(method,pathname));
@@ -80,6 +85,11 @@ export async function route(request,response) {
     if(pathname==='/api/places/aliases' && method==='POST'){requireRoles(user,['admin']);return await saveAlias(user,request,response);}
     if(pathname==='/api/exports/entries' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await exportEntries(user,url,response);}
     if(pathname==='/api/exports/verification' && method==='GET'){requireRoles(user,['admin']);return await exportVerification(user,url,response);}
+    if(pathname==='/api/dashboard' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await getDashboard(user,url,response);}
+    if(pathname==='/api/exports/dashboard' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await exportDashboard(user,url,response);}
+    if(pathname==='/api/dsr' && method==='GET'){requireRoles(user,['admin']);return await listDsr(user,url,response);}
+    const dsrMatch=pathname.match(/^\/api\/dsr\/([0-9a-f-]{36})$/i);
+    if(dsrMatch && method==='PATCH'){requireRoles(user,['admin']);return await updateDsr(user,dsrMatch[1],request,response);}
     if(pathname==='/api/network-contacts' && method==='GET'){requireRoles(user,['admin']);return await contacts(user,url,response);}
     const contactMatch=pathname.match(/^\/api\/network-contacts\/([0-9a-f-]{36})$/i);
     if(contactMatch && method==='PATCH'){requireRoles(user,['admin']);return await updateContact(user,contactMatch[1],request,response);}

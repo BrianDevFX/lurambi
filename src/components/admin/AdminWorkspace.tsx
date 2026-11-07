@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api/client.js';
 import { AdminTools } from './AdminTools';
+import { Dashboard } from './Dashboard';
 
 type User = { id: string; full_name: string; phone: string; national_id_masked: string | null; status: string; home_ward_name: string | null; referral_code: string | null };
 type Entry = { id: string; name: string; phone_e164: string | null; national_id_masked: string | null; ward_name: string; polling_centre_name: string | null; station_name: string | null; flags: string[]; captured_on: string };
@@ -8,12 +9,12 @@ type Props = { user: { full_name: string; role: string }; onSignOut: () => void 
 
 export function AdminWorkspace({ user, onSignOut }: Props) {
   const [tab,setTab] = useState('Mobilizers');
-  const adminTabs=['Mobilizers','Entries','Flags','Verification','Import/Export','Places','Network','Audit Log','Settings'];
-  const tabs=user.role==='admin'?adminTabs:['Mobilizers','Entries'];
+  const adminTabs=['Dashboard','Mobilizers','Entries','Flags','Verification','Import/Export','Places','Network','Data Requests','Audit Log','Settings'];
+  const tabs=user.role==='admin'?adminTabs:['Dashboard','Mobilizers','Entries'];
   return <main className="workspace">
     <header className="topbar"><div><strong>Lurambi Field Platform</strong><small>{user.full_name} · {user.role === 'admin' ? 'Admin' : 'Ward Coordinator'}</small></div><button className="quiet-button" onClick={onSignOut}>Sign out</button></header>
     <nav className="role-tabs">{tabs.map(item=><button key={item} className={tab===item?'active':''} onClick={() => setTab(item)}>{item}</button>)}</nav>
-    <section className="content">{tab === 'Mobilizers' ? <Mobilizers user={user}/> : tab==='Entries' ? <Entries canEdit={user.role==='admin'}/> : <AdminTools tab={tab}/>}</section>
+    <section className="content">{tab==='Dashboard'?<Dashboard role={user.role}/>:tab === 'Mobilizers' ? <Mobilizers user={user}/> : tab==='Entries' ? <Entries canEdit={user.role==='admin'}/> : <AdminTools tab={tab}/>}</section>
   </main>;
 }
 
