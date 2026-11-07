@@ -10,3 +10,4 @@ data/
 *.xls
 *.csv
 *.bundle
+!db/reference-data/iebc-lurambi-2022-places.csv

@@ -151,3 +151,13 @@
 - Added localhost API smoke coverage for returned station labels, role-protected place create/rename, required reasons, and audit records.
 - Validation: npm run lint PASS; npm test PASS (4 files, 32 tests with local PostgreSQL); npm run build PASS. The database-backed smoke tests used only the disposable localhost PostgreSQL cluster and synthetic fixtures. Production was not contacted.
 - Not deployed. Changes are on codex/admin-operations for review.
+
+
+## IEBC 2022 historical places baseline — 2026-11-08
+
+- Added `db/reference-data/iebc-lurambi-2022-places.csv` as a manual, import-ready historical baseline from the IEBC 2022 polling-station register. It contains 98 registration-centre rows and 176 station/stream rows across the six Lurambi wards; it is not seeded or imported automatically.
+- Added `db/reference-data/README.md` with source link, PDF SHA-256, validation counts, vintage warning, and admin import steps. Repeated facility names receive a stream suffix from the IEBC code so station options remain unique. The current database schema does not persist full polling-station codes.
+- Validation: all 176 source codes unique; all ward assignments matched the six migrated wards; ward totals matched the IEBC register totals and summed to 89,627. CSV parser validation confirmed 274 records (98 centres + 176 stations), all six canonical ward names, and unique station codes.
+- Validation: `npm run lint` PASS; `npm test` PASS (4 files, 32 tests, using only local PostgreSQL); `npm run build` PASS. No production database was accessed.
+- The CSV is allowlisted specifically in `.gitignore` because it contains public reference places, not voter personal data. It is not used by migrations or `npm run db:seed:dev`.
+- Not imported into production and not deployed. The 2022 list is historical and must not be called current 2027 data.
