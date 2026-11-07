@@ -18,6 +18,11 @@
 - No hosted database, Vercel account or external service was contacted.
 - Known gap: this phase exposes only the API health shell. Authentication and field workflows follow in Phase B.
 
+### Phase A routing follow-up
+
+- Vercel served the SPA shell for `/api/health` after the first routing change. The native Vite Functions convention uses concrete files under `api/`, so the catch-all is now a concrete `api/handler.js` function with `/api/:path*` forwarded through a query parameter to the internal router. The SPA rewrite remains the final fallback.
+- The routing change is validated locally; a Vercel preview is still required to confirm its platform routing behavior.
+
 ### HUMAN STEPS
 
 - Create a Neon project and copy its pooled connection string.

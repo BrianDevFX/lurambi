@@ -13,7 +13,11 @@ routes.set(key('GET','/api/health'), async (_request,response) => {
 
 export async function route(request,response) {
   const url = new URL(request.url || '/', `https://${request.headers.host || 'localhost'}`);
-  const handler = routes.get(key(request.method || 'GET',url.pathname));
+  const forwardedPath = url.searchParams.get('__route');
+  const pathname = forwardedPath
+    ? `/api/${forwardedPath.replace(/^\/+/, '')}`
+    : url.pathname;
+  const handler = routes.get(key(request.method || 'GET',pathname));
   if (!handler) { response.status(404).json({ error: 'Not found.' }); return; }
   await handler(request,response);
 }
