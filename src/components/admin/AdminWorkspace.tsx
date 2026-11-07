@@ -8,7 +8,7 @@ type Entry = { id: string; name: string; phone_e164: string | null; national_id_
 type Props = { user: { full_name: string; role: string }; onSignOut: () => void };
 
 export function AdminWorkspace({ user, onSignOut }: Props) {
-  const [tab,setTab] = useState('Mobilizers');
+  const [tab,setTab] = useState('Dashboard');
   const adminTabs=['Dashboard','Mobilizers','Entries','Flags','Verification','Import/Export','Places','Network','Data Requests','Audit Log','Settings'];
   const tabs=user.role==='admin'?adminTabs:['Dashboard','Mobilizers','Entries'];
   return <main className="workspace">

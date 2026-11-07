@@ -1,5 +1,6 @@
-import { pool } from '../db.js';
-import { ApiError, json } from '../http.js';
+import { pool, withTransaction } from '../db.js';
+import { z } from 'zod';
+import { ApiError, json, readJson } from '../http.js';
 
 function optionalUuid(value, label) {
   if (value === undefined || value === '') return null;
@@ -44,4 +45,63 @@ export async function listStations(user, url, response) {
     params,
   );
   return json(response, 200, { stations: rows });
+}
+
+const centreSchema = z.object({ ward_id: z.string().uuid(), name: z.string().trim().min(2).max(180), code: z.string().trim().max(40).optional().nullable(), reason: z.string().trim().min(3).max(500) });
+const stationSchema = z.object({ polling_centre_id: z.string().uuid(), station_name: z.string().trim().min(2).max(180), station_number: z.coerce.number().int().positive(), reason: z.string().trim().min(3).max(500) });
+
+async function writePlaceAudit(client, user, action, type, id, values, reason, oldValues = null) {
+  await client.query(
+    'INSERT INTO public.audit_log(user_id,user_role,action,entity_type,entity_id,old_values,new_values,reason) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8)',
+    [user.id,user.role,action,type,id,oldValues===null?null:JSON.stringify(oldValues),JSON.stringify(values),reason],
+  );
+}
+
+export async function createCentre(user, request, response) {
+  const parsed = centreSchema.safeParse(await readJson(request));
+  if (!parsed.success) throw new ApiError(400, 'Choose a ward, enter a valid polling centre name and give a reason.');
+  const result = await withTransaction(async(client) => {
+    const {rows}=await client.query('INSERT INTO public.polling_centres(ward_id,name,code,synthetic) VALUES($1,$2,$3,false) RETURNING id,ward_id,name,code',[parsed.data.ward_id,parsed.data.name,parsed.data.code||null]);
+    await writePlaceAudit(client,user,'create','polling_centre',rows[0].id,rows[0],parsed.data.reason);
+    return rows[0];
+  });
+  return json(response, 201, { centre: result });
+}
+
+export async function renameCentre(user, id, request, response) {
+  const parsed = z.object({ name: z.string().trim().min(2).max(180), reason: z.string().trim().min(3).max(500) }).safeParse(await readJson(request));
+  if (!parsed.success) throw new ApiError(400, 'Enter a valid centre name and give a reason.');
+  const result = await withTransaction(async(client) => {
+    const previous=await client.query('SELECT id,ward_id,name,code FROM public.polling_centres WHERE id=$1 FOR UPDATE',[id]);
+    if(!previous.rowCount)throw new ApiError(404,'Polling centre not found.');
+    const {rows}=await client.query('UPDATE public.polling_centres SET name=$1,synthetic=false,updated_at=now() WHERE id=$2 RETURNING id,ward_id,name,code',[parsed.data.name,id]);
+    await writePlaceAudit(client,user,'update','polling_centre',id,rows[0],parsed.data.reason,previous.rows[0]);
+    return rows[0];
+  });
+  return json(response, 200, { centre: result });
+}
+
+export async function createStation(user, request, response) {
+  const parsed = stationSchema.safeParse(await readJson(request));
+  if (!parsed.success) throw new ApiError(400, 'Choose a centre, enter a valid station name and number, and give a reason.');
+  const result = await withTransaction(async(client) => {
+    const {rows}=await client.query('INSERT INTO public.polling_stations(polling_centre_id,ward_id,station_name,station_number,synthetic) SELECT c.id,c.ward_id,$2,$3,false FROM public.polling_centres c WHERE c.id=$1 RETURNING id,ward_id,polling_centre_id,station_name,station_number',[parsed.data.polling_centre_id,parsed.data.station_name,parsed.data.station_number]);
+    if(!rows.length)throw new ApiError(404,'Polling centre not found.');
+    await writePlaceAudit(client,user,'create','polling_station',rows[0].id,rows[0],parsed.data.reason);
+    return rows[0];
+  });
+  return json(response, 201, { station: result });
+}
+
+export async function renameStation(user, id, request, response) {
+  const parsed = z.object({ station_name: z.string().trim().min(2).max(180), station_number: z.coerce.number().int().positive(), reason: z.string().trim().min(3).max(500) }).safeParse(await readJson(request));
+  if (!parsed.success) throw new ApiError(400, 'Enter a valid station name and number and give a reason.');
+  const result = await withTransaction(async(client) => {
+    const previous=await client.query('SELECT id,ward_id,polling_centre_id,station_name,station_number FROM public.polling_stations WHERE id=$1 FOR UPDATE',[id]);
+    if(!previous.rowCount)throw new ApiError(404,'Polling station not found.');
+    const {rows}=await client.query('UPDATE public.polling_stations SET station_name=$1,station_number=$2,synthetic=false,updated_at=now() WHERE id=$3 RETURNING id,ward_id,polling_centre_id,station_name,station_number',[parsed.data.station_name,parsed.data.station_number,id]);
+    await writePlaceAudit(client,user,'update','polling_station',id,rows[0],parsed.data.reason,previous.rows[0]);
+    return rows[0];
+  });
+  return json(response, 200, { station: result });
 }

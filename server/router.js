@@ -3,7 +3,7 @@ import { getSessionUser, requireApproved, requireRoles } from './auth.js';
 import { ApiError, json } from './http.js';
 import { login, logout, me, signup, signupLocations } from './routes/auth.js';
 import { captureEntry, consentPolicy, listEntries, listMyEntries, searchEntries } from './routes/entries.js';
-import { listCentres, listStations, listWards } from './routes/places.js';
+import { createCentre, createStation, listCentres, listStations, listWards, renameCentre, renameStation } from './routes/places.js';
 import { approveUser, listUsers, pendingUsers, resetPassword, suspendUser } from './routes/users.js';
 import { auditLog, bulkVerification, contacts, flags, resolveFlag, setVerification, settings, updateContact, updateEntry, updateSetting, verificationQueue } from './routes/admin.js';
 import { createImport, dryRunImport, importBatch, importHistory, placeAliases, saveAlias } from './routes/imports.js';
@@ -83,6 +83,12 @@ export async function route(request,response) {
     if(importMatch && method==='POST'){requireRoles(user,['admin']);return await importBatch(user,importMatch[1],request,response);}
     if(pathname==='/api/places/aliases' && method==='GET'){requireRoles(user,['admin']);return await placeAliases(user,url,response);}
     if(pathname==='/api/places/aliases' && method==='POST'){requireRoles(user,['admin']);return await saveAlias(user,request,response);}
+    if(pathname==='/api/places/centres' && method==='POST'){requireRoles(user,['admin']);return await createCentre(user,request,response);}
+    if(pathname==='/api/places/stations' && method==='POST'){requireRoles(user,['admin']);return await createStation(user,request,response);}
+    const centreMatch=pathname.match(/^\/api\/places\/centres\/([0-9a-f-]{36})$/i);
+    if(centreMatch&&method==='PATCH'){requireRoles(user,['admin']);return await renameCentre(user,centreMatch[1],request,response);}
+    const stationMatch=pathname.match(/^\/api\/places\/stations\/([0-9a-f-]{36})$/i);
+    if(stationMatch&&method==='PATCH'){requireRoles(user,['admin']);return await renameStation(user,stationMatch[1],request,response);}
     if(pathname==='/api/exports/entries' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await exportEntries(user,url,response);}
     if(pathname==='/api/exports/verification' && method==='GET'){requireRoles(user,['admin']);return await exportVerification(user,url,response);}
     if(pathname==='/api/dashboard' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await getDashboard(user,url,response);}

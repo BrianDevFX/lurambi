@@ -140,3 +140,14 @@
 - Replayed migrations `0001`–`0006` from an empty disposable localhost database. All six applied; a second run skipped all six.
 - The attempt to run migrations from `.env.local` was blocked by automatic review because the connection target was not identified as development/test. No remote database migration was run. To continue safely, configure an untracked `.env.test` with a dedicated development/test `DATABASE_URL` and rerun with `node --env-file=.env.test scripts/migrate.mjs`.
 - After `.env.test` was confirmed ready, ran `node --env-file=.env.test scripts/migrate.mjs`: `0001` and `0002` were already applied; `0003` through `0006` were applied successfully. The follow-up run skipped all six migrations. The PostgreSQL driver printed a non-fatal SSL-mode compatibility warning; no migration error occurred.
+
+
+## Admin places workflow follow-up — 2026-11-08
+
+- Fixed the mobilizer station dropdown: the places API returns station_name, and the form now renders that field instead of the missing name. This also makes the existing dev-seeded stations visible.
+- Added admin-only centre/station create and rename routes and forms to the Places tab. Each change requires a reason and writes old/new values to audit_log; existing place IDs remain stable when renamed.
+- Kept the six support levels as fixed capture choices; the admin Places tab now says they are selected on Search/Add and lists them.
+- The local seed remains clearly synthetic and dev-only. The Places tab points admins to the official CSV import for production source data; no real place list was invented.
+- Added localhost API smoke coverage for returned station labels, role-protected place create/rename, required reasons, and audit records.
+- Validation: npm run lint PASS; npm test PASS (4 files, 32 tests with local PostgreSQL); npm run build PASS. The database-backed smoke tests used only the disposable localhost PostgreSQL cluster and synthetic fixtures. Production was not contacted.
+- Not deployed. Changes are on codex/admin-operations for review.

@@ -27,7 +27,73 @@ function ImportExport(){const [file,setFile]=useState<File|null>(null);const [ro
  async function run(dryRun:boolean){if(!file||!rows.length)return;setBusy(true);setError('');setMessage('');try{const mappedRows=rows.map(mapped);const normalized=[];for(const row of mappedRows){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(row))))).map(b=>b.toString(16).padStart(2,'0')).join('');normalized.push({...row,row_hash:hash});}const results=[];let importId='';if(!dryRun){const created=await api('/api/imports',{method:'POST',body:{file_name:file.name,import_type:importType}});importId=created.import.id;}for(let start=0;start<normalized.length;start+=500){const batch=normalized.slice(start,start+500);results.push(await api(dryRun?'/api/imports/dry-run':`/api/imports/${importId}/batch`,{method:'POST',body:{rows:batch,import_type:importType,dry_run:dryRun}}));}setMessage(`${dryRun?'Dry run':'Import'} complete: ${results.reduce((n,r)=>n+(r.imported||0),0)} imported, ${results.reduce((n,r)=>n+(r.rejected||0),0)} rejected.`);if(dryRun){const XLSX=await import('xlsx');const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{type:importType,total:rows.length,imported:results.reduce((n,r)=>n+(r.imported||0),0),merged:results.reduce((n,r)=>n+(r.merged||0),0),rejected:results.reduce((n,r)=>n+(r.rejected||0),0)},...results.flatMap(r=>r.errors||[])]),'Report');XLSX.writeFile(wb,'import-report.xlsx');}}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <div className="stack wide"><h1>Import and export</h1><section className="panel stack"><label>Import type<select value={importType} onChange={e=>{setImportType(e.target.value as typeof importType);setMapping({});setRows([]);setHeaders([]);setFile(null);}}><option value="entries">Legacy entries</option><option value="network_contacts">Pastors and CHPs</option><option value="places">Wards, centres and stations</option></select></label><p className="muted">.xlsx or .csv · up to 5 MB and 20,000 rows</p><input type="file" accept=".xlsx,.csv" onChange={e=>void choose(e.target.files?.[0]||null)}/>{headers.length>0&&<><div className="form-grid">{columns.map(c=><label key={c}>{c.replaceAll('_',' ')}<select value={mapping[c]||''} onChange={e=>setMapping({...mapping,[c]:e.target.value})}><option value="">Skip</option>{headers.map(h=><option key={h}>{h}</option>)}</select></label>)}</div><p>{rows.length} rows · preview</p><div className="table-scroll"><table><thead><tr>{columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{rows.slice(0,20).map((r,i)=><tr key={i}>{columns.map(c=><td key={c}>{String(mapped(r)[c]??'')}</td>)}</tr>)}</tbody></table></div><div className="action-row"><button disabled={busy} onClick={()=>void run(true)}>Dry run</button><button disabled={busy} onClick={()=>void run(false)}>Import</button></div></>}{message&&<p role="status" className="success">{message}</p>}{error&&<p role="alert" className="error">{error}</p>}</section><div className="action-row"><button onClick={()=>{window.location.href='/api/exports/entries?format=xlsx';}}>Export Excel</button><button onClick={()=>{window.location.href='/api/exports/entries?format=csv';}}>Export CSV</button><button onClick={()=>{window.location.href='/api/exports/entries?format=pdf';}}>Export PDF</button></div></div>}
 
-function Places(){const [places,setPlaces]=useState<any>({wards:[],centres:[],stations:[]});const [aliases,setAliases]=useState<Row[]>([]);const [type,setType]=useState('ward');const [target,setTarget]=useState('');const [raw,setRaw]=useState('');const [error,setError]=useState('');const load=()=>Promise.all([api('/api/signup/places'),api('/api/places/aliases')]).then(([p,a])=>{setPlaces(p);setAliases(a.aliases);}).catch(e=>setError(e.message));useEffect(()=>{void load();},[]);const targets=type==='ward'?places.wards:type==='polling_centre'?places.centres:places.stations;async function save(e:any){e.preventDefault();try{await api('/api/places/aliases',{method:'POST',body:{raw_alias:raw,canonical_type:type,target_id:target,confidence:1}});setRaw('');void load();}catch(e){setError((e as Error).message);}}return <div className="stack wide"><h1>Places and aliases</h1><p className="muted">Map spelling variants to database places.</p><form className="panel stack" onSubmit={save}><label>Place type<select value={type} onChange={e=>{setType(e.target.value);setTarget('');}}><option value="ward">Ward</option><option value="polling_centre">Polling centre</option><option value="polling_station">Polling station</option></select></label><label>Alias<input required value={raw} onChange={e=>setRaw(e.target.value)}/></label><label>Canonical place<select required value={target} onChange={e=>setTarget(e.target.value)}><option value="">Select place</option>{targets.map((p:any)=><option key={p.id} value={p.id}>{p.name||p.station_name}</option>)}</select></label><button>Save mapping</button>{error&&<p className="error">{error}</p>}</form><ul className="entry-list panel">{aliases.map((a:any)=><li key={a.id}><strong>{a.raw_alias}</strong><span>{a.ward_name||a.centre_name||a.station_name||'Unmapped'}</span></li>)}</ul></div>}
+function Places(){
+  const [places,setPlaces]=useState<any>({wards:[],centres:[],stations:[]});
+  const [aliases,setAliases]=useState<Row[]>([]);
+  const [wardId,setWardId]=useState('');
+  const [centreId,setCentreId]=useState('');
+  const [centreName,setCentreName]=useState('');
+  const [centreCode,setCentreCode]=useState('');
+  const [stationName,setStationName]=useState('');
+  const [stationNumber,setStationNumber]=useState('1');
+  const [type,setType]=useState('ward');
+  const [target,setTarget]=useState('');
+  const [raw,setRaw]=useState('');
+  const [error,setError]=useState('');
+  const [message,setMessage]=useState('');
+  const [busy,setBusy]=useState(false);
+  const centres=places.centres.filter((item:any)=>!wardId||item.ward_id===wardId);
+  const stations=places.stations.filter((item:any)=>!centreId||item.polling_centre_id===centreId);
+  const load=async()=>{
+    const [p,a]=await Promise.all([api('/api/signup/places'),api('/api/places/aliases')]);
+    setPlaces(p);setAliases(a.aliases);
+    if(!wardId&&p.wards[0])setWardId(p.wards[0].id);
+  };
+  useEffect(()=>{void load().catch((e)=>setError(e.message));},[]);
+  const targets=type==='ward'?places.wards:type==='polling_centre'?places.centres:places.stations;
+  async function addCentre(e:any){
+    e.preventDefault();setError('');setMessage('');setBusy(true);
+    try{await api('/api/places/centres',{method:'POST',body:{ward_id:wardId,name:centreName,code:centreCode||null,reason:window.prompt('Reason for adding this centre')||''}});setCentreName('');setCentreCode('');setMessage('Polling centre added and available in Search/Add.');await load();}
+    catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  async function addStation(e:any){
+    e.preventDefault();setError('');setMessage('');setBusy(true);
+    try{await api('/api/places/stations',{method:'POST',body:{polling_centre_id:centreId,station_name:stationName,station_number:Number(stationNumber),reason:window.prompt('Reason for adding this station')||''}});setStationName('');setMessage('Polling station added and available in Search/Add.');await load();}
+    catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  async function renamePlace(kind:'centres'|'stations',item:any){
+    const current=kind==='centres'?item.name:item.station_name;
+    const name=window.prompt(kind==='centres'?'Polling centre name':'Polling station name',current);
+    if(!name||name.trim()===current)return;
+    const reason=window.prompt('Reason for this change');if(!reason?.trim())return;
+    try{await api('/api/places/'+kind+'/'+item.id,{method:'PATCH',body:kind==='centres'?{name,reason}:{station_name:name,station_number:item.station_number,reason}});setMessage('Place updated.');await load();}
+    catch(e){setError((e as Error).message);}
+  }
+  async function saveAlias(e:any){e.preventDefault();setError('');try{const reason=window.prompt('Reason for this mapping');if(!reason?.trim())return;await api('/api/places/aliases',{method:'POST',body:{raw_alias:raw,canonical_type:type,target_id:target,confidence:1,reason}});setRaw('');setMessage('Place alias saved.');await load();}catch(e){setError((e as Error).message);}}
+  return <div className="stack wide">
+    <div><h1>Places</h1><p className="muted">Add or update centres and stations here. They appear in the mobilizer Search/Add form.</p><p className="muted">For a bulk setup, use Import/Export → Wards, centres and stations with the official CSV. Local development samples are labeled Synthetic and are not official polling places.</p></div>
+    {error&&<p role="alert" className="error">{error}</p>}{message&&<p role="status" className="success">{message}</p>}
+    <section className="panel stack"><h2>Add polling centre</h2><form className="form-grid" onSubmit={addCentre}>
+      <label>Ward<select required value={wardId} onChange={e=>{setWardId(e.target.value);setCentreId('');}}><option value="">Select ward</option>{places.wards.map((w:any)=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+      <label>Centre name<input required minLength={2} maxLength={180} value={centreName} onChange={e=>setCentreName(e.target.value)} placeholder="Official polling centre name"/></label>
+      <label>Code (optional)<input maxLength={40} value={centreCode} onChange={e=>setCentreCode(e.target.value)}/></label><button disabled={busy||!wardId}>Add centre</button>
+    </form></section>
+    <section className="panel stack"><h2>Add polling station</h2><form className="form-grid" onSubmit={addStation}>
+      <label>Ward<select required value={wardId} onChange={e=>{setWardId(e.target.value);setCentreId('');}}><option value="">Select ward</option>{places.wards.map((w:any)=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+      <label>Polling centre<select required value={centreId} onChange={e=>setCentreId(e.target.value)}><option value="">Select centre</option>{centres.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <label>Station name<input required minLength={2} maxLength={180} value={stationName} onChange={e=>setStationName(e.target.value)} placeholder="Official station name"/></label>
+      <label>Station number<input required type="number" min="1" step="1" value={stationNumber} onChange={e=>setStationNumber(e.target.value)}/></label><button disabled={busy||!centreId}>Add station</button>
+    </form></section>
+    <section className="panel stack"><h2>Current places</h2><p className="muted">Rename a place to correct it. Existing entries keep their place IDs.</p>
+      {!places.wards.length&&<p>No wards found. Add the official ward list using Import/Export → Wards, centres and stations.</p>}
+      {places.wards.map((w:any)=><details key={w.id}><summary>{w.name} · {places.centres.filter((c:any)=>c.ward_id===w.id).length} centres</summary><ul className="entry-list">{places.centres.filter((c:any)=>c.ward_id===w.id).map((c:any)=><li key={c.id}><strong>{c.name}</strong><button className="quiet-button" onClick={()=>void renamePlace('centres',c)}>Rename</button><ul>{places.stations.filter((st:any)=>st.polling_centre_id===c.id).map((st:any)=><li key={st.id}><span>{st.station_number}. {st.station_name}</span><button className="quiet-button" onClick={()=>void renamePlace('stations',st)}>Rename</button></li>)}</ul></li>)}</ul></details>)}
+    </section>
+    <section className="panel"><h2>Support level</h2><p>Choose it on the mobilizer Search/Add form when recording an entry. The available values are fixed: Strong supporter, Leaning, Undecided, Opposed, Not reached and Not assessed.</p></section>
+    <section className="panel stack"><h2>Place aliases</h2><p className="muted">Map spelling variants to a canonical place so imports resolve consistently.</p><form className="stack" onSubmit={saveAlias}><label>Place type<select value={type} onChange={e=>{setType(e.target.value);setTarget('');}}><option value="ward">Ward</option><option value="polling_centre">Polling centre</option><option value="polling_station">Polling station</option></select></label><label>Alias<input required maxLength={180} value={raw} onChange={e=>setRaw(e.target.value)}/></label><label>Canonical place<select required value={target} onChange={e=>setTarget(e.target.value)}><option value="">Select place</option>{targets.map((p:any)=><option key={p.id} value={p.id}>{p.name||p.station_name}</option>)}</select></label><button disabled={!target}>Save mapping</button></form>
+      <ul className="entry-list">{aliases.map((a:any)=><li key={a.id}><strong>{a.raw_alias}</strong><span>{a.ward_name||a.centre_name||a.station_name||'Unmapped'}</span></li>)}</ul>
+    </section>
+  </div>;
+}
 
 function Audit(){const [events,setEvents]=useState<Row[]>([]);const [error,setError]=useState('');useEffect(()=>{api('/api/audit-log').then(d=>setEvents(d.events)).catch(e=>setError(e.message));},[]);return <div className="stack wide"><h1>Audit log</h1>{error&&<p className="error">{error}</p>}<ul className="entry-list panel">{events.map((e:any)=><li key={e.id}><strong>{e.action} · {e.entity_type}</strong><span>{e.reason}</span><small>{e.created_at} · {e.entity_id}</small></li>)}</ul></div>}
 

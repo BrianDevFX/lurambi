@@ -27,6 +27,8 @@ let mobilizerId;
 let secondMobilizerId;
 let pendingId;
 let approvedReferral;
+let adminTestCentreId;
+let adminTestStationId;
 const phones = ['+254700000001','+254700000002','+254700000003','+254700000004','+254700000005','+254700000006'];
 const names = ['Synthetic Phase B Admin','Synthetic Phase B Coordinator','Synthetic Phase B Mobilizer A','Synthetic Phase B Mobilizer B','Synthetic Phase B Pending','Synthetic Phase B Signup'];
 const passwords = Array.from({ length: 6 }, () => randomBytes(24).toString('base64url'));
@@ -115,6 +117,8 @@ describe('Phase B API smoke', () => {
     await new Promise((resolve) => server?.close(resolve));
     if (client) {
       await client.query("DELETE FROM public.entries WHERE name='=Synthetic Imported Person'");
+      if(adminTestStationId)await client.query('DELETE FROM public.polling_stations WHERE id=$1',[adminTestStationId]);
+      if(adminTestCentreId)await client.query('DELETE FROM public.polling_centres WHERE id=$1',[adminTestCentreId]);
       await client.query("DELETE FROM public.data_subject_requests WHERE requester_name='Synthetic DSR Requester'");
       await client.query('DELETE FROM public.exports_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.imports WHERE created_by IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
@@ -197,6 +201,21 @@ describe('Phase B API smoke', () => {
     expect(audit.result.events.some((event)=>event.entity_id===captureId&&event.action==='update')).toBe(true);
     const verification=await request(`/api/verification/${captureId}`,{method:'POST',cookie:adminCookie,body:{status:'verified',note:'Synthetic register check'}});
     expect(verification.response.status).toBe(200);
+    const locations=await request('/api/signup/places');
+    expect(locations.response.status).toBe(200);
+    expect(locations.result.stations.every((station)=>typeof station.station_name==='string')).toBe(true);
+    const missingPlaceReason=await request('/api/places/centres',{method:'POST',cookie:adminCookie,body:{ward_id:wardA,name:'Synthetic Admin Centre'}});
+    expect(missingPlaceReason.response.status).toBe(400);
+    const createdCentre=await request('/api/places/centres',{method:'POST',cookie:adminCookie,body:{ward_id:wardA,name:'Synthetic Admin Managed Centre',code:'SYN-ADMIN',reason:'Synthetic admin place test'}});
+    expect(createdCentre.response.status).toBe(201);adminTestCentreId=createdCentre.result.centre.id;
+    const createdStation=await request('/api/places/stations',{method:'POST',cookie:adminCookie,body:{polling_centre_id:adminTestCentreId,station_name:'Synthetic Admin Managed Station',station_number:1,reason:'Synthetic admin place test'}});
+    expect(createdStation.response.status).toBe(201);adminTestStationId=createdStation.result.station.id;
+    const renamedCentre=await request('/api/places/centres/'+adminTestCentreId,{method:'PATCH',cookie:adminCookie,body:{name:'Synthetic Renamed Centre',reason:'Synthetic admin rename test'}});
+    expect(renamedCentre.response.status).toBe(200);
+    const renamedStation=await request('/api/places/stations/'+adminTestStationId,{method:'PATCH',cookie:adminCookie,body:{station_name:'Synthetic Renamed Station',station_number:2,reason:'Synthetic admin rename test'}});
+    expect(renamedStation.response.status).toBe(200);
+    const placesAudit=await request('/api/audit-log?entity_type=polling_station',{cookie:adminCookie});
+    expect(placesAudit.result.events.some((event)=>event.entity_id===adminTestStationId&&event.action==='update')).toBe(true);
 
     const created=await request('/api/imports',{method:'POST',cookie:adminCookie,body:{file_name:'synthetic-phase-c.csv',import_type:'entries'}});
     expect(created.response.status).toBe(201);
