@@ -29,6 +29,30 @@ export async function readSession(request) {
   } catch { return null; }
 }
 
+export async function getSessionUser(request, pool) {
+  const session = await readSession(request);
+  if (!session) return null;
+  const { rows } = await pool.query(
+    `SELECT id, phone, full_name, national_id_masked, role, status, home_ward_id,
+            home_polling_station_id, referral_code
+       FROM public.users WHERE id = $1`,
+    [session.id],
+  );
+  return rows[0] || null;
+}
+
+export function requireApproved(user) {
+  if (!user) { const error = new Error('Sign in required.'); error.status = 401; throw error; }
+  if (user.status !== 'approved') { const error = new Error('Account is not approved.'); error.status = 403; throw error; }
+  return user;
+}
+
+export function requireRoles(user, roles) {
+  requireApproved(user);
+  if (roles?.length && !roles.includes(user.role)) { const error = new Error('Role is not permitted.'); error.status = 403; throw error; }
+  return user;
+}
+
 export async function writeSession(response, user) {
   const token = await signSession(user);
   response.setHeader('Set-Cookie', `${cookieName}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${lifetimeSeconds}`);
