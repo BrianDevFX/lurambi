@@ -59,3 +59,36 @@
 - To exercise Phase B locally, start the disposable/local PostgreSQL service, set a local `DATABASE_URL` and a strong local `JWT_SECRET`, run `npm run db:migrate`, then `npm run db:seed:dev` for synthetic places only. Set `DATABASE_URL` and `JWT_SECRET` in the shell before `npm run dev`.
 - To test with a fresh Neon development project after this branch is reviewed, apply the migrations there, create the first admin with shell-only `ADMIN_PHONE`, `ADMIN_PASSWORD`, and `ADMIN_NAME`, and provision official wards/centres/stations before attempting capture. Do not seed synthetic place records into a live project.
 - Review and replace the starter consent text/version before any real capture.
+
+## Phase C — Admin operations, import and exports
+
+- Added migration `0004_phase_c_admin.sql` for admin-only entry edits with a mandatory reason and audit record, flag resolution/dismissal, evidence-noted verification status updates, and scoped export logging. Added `0005_mobilizer_export_log.sql` so approved mobilizers can log their own-entry exports.
+- Added admin API and workspace areas for flags, verification, entry edit, import/export, place alias mapping, network contacts, audit log, and settings. Coordinator entry lists remain read-only and role-scoped.
+- Added a browser import wizard for `.xlsx` and `.csv` with type selection, column mapping, first-sheet preview (20 rows), file-size/row-count checks, batches capped at 500, dry-run counts, import records, and a downloadable dry-run report. Server batch handlers support entries, network contacts, and ward/centre/station place rows. Entry imports normalize phone and ID, mark legacy consent as unconfirmed, map exact ward/place aliases, flag invalid/missing ID and invalid phone, and use row hash plus unique ID conflicts for safe repeat submissions.
+- Added role-scoped CSV/XLSX/PDF entry exports, a verification export, spreadsheet formula neutralization, export logging, admin settings editing with a reason, and contact reach-status/notes/CHP exclusion controls.
+- The attempted legacy pseudo-user creation was omitted after automatic review rejected an approved `admin`-role pseudo-account as an unintended privilege grant. Legacy imports are stored with `source='legacy'`, a batch ID, `consent_status='legacy_unconfirmed'`, and `mobilizer_id=NULL`; whether to add a non-login pseudo-user identity needs a safer schema decision.
+
+### Validation
+
+- `npm run lint`: PASS (`tsc --noEmit`).
+- `npm test`: PASS — 3 test files, 29 tests, using the disposable PostgreSQL instance on localhost. Covers admin reason/audit, verification update, non-writing dry-run, import idempotency, export logging and formula neutralization, plus Phase B API checks.
+- `npm run build`: PASS — JS 279.07 kB (86.67 kB gzip), dynamically loaded XLSX chunk 491.99 kB (160.33 kB gzip), CSS 3.99 kB (1.39 kB gzip).
+- Local migrations run twice: PASS — `0004_phase_c_admin.sql` and `0005_mobilizer_export_log.sql` applied once and skipped on the second run.
+- No hosted database, Vercel account or real supporter data was used.
+
+### Known gaps
+
+- Import currently assumes the first worksheet row is the header. Dry-run runs the validation/mapping path without writes; it does not execute the full insert transaction and roll it back. Error reasons are downloaded, but the report does not yet contain a complete per-row imported/merged/flagged report.
+- Cross-tab merge by normalized ID prevents a second row insert, but does not update the retained record to the earliest `captured_on`. More advanced trigram matching, register-based flags, all legacy import edge cases, and a persistent needs-mapping queue are incomplete.
+- The legacy import attribution is `mobilizer_id=NULL`, not a dedicated pseudo-user. A safer representation is a human/schema decision after the auto-review rejection described above.
+- Admin UI flag actions resolve or dismiss; merge is not implemented. The verification page is a flat list with per-entry updates; the API supports bulk updates, but grouped and bulk UI is still needed.
+- Network contact import and place import are available through the same mapped wizard, but there is no dedicated contact export, full place CRUD/replacement workflow, or persistent needs-mapping review screen.
+- Entry exports are implemented; flag, summary, performance, and network-contact exports, downloadable import templates, and PDF page numbers/filter headers remain incomplete. Admin edit UI currently exposes name only although the API supports several fields.
+- Vercel preview behavior was not checked. Phase C branch has not been pushed or deployed.
+
+### HUMAN STEPS
+
+- Do not point this branch at production or import real data yet. Review the known gaps above and wait for the Phase D release before field use.
+- For local Phase C testing, use a local PostgreSQL database only, set local `DATABASE_URL` and `JWT_SECRET`, and run `npm run db:migrate`; use `npm run db:seed:dev` only for synthetic places in the local database.
+- Before any deployed preview test, push/review this branch, configure a separate Neon development database, apply migrations `0001` through `0005`, and use only a synthetic workbook.
+- Decide how legacy rows should be attributed without granting a login role to the pseudo-user. Campaign staff must also approve the consent text before captures.

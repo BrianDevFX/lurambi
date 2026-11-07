@@ -5,6 +5,9 @@ import { login, logout, me, signup, signupLocations } from './routes/auth.js';
 import { captureEntry, consentPolicy, listEntries, listMyEntries, searchEntries } from './routes/entries.js';
 import { listCentres, listStations, listWards } from './routes/places.js';
 import { approveUser, listUsers, pendingUsers, resetPassword, suspendUser } from './routes/users.js';
+import { auditLog, bulkVerification, contacts, flags, resolveFlag, setVerification, settings, updateContact, updateEntry, updateSetting, verificationQueue } from './routes/admin.js';
+import { createImport, dryRunImport, importBatch, importHistory, placeAliases, saveAlias } from './routes/imports.js';
+import { exportEntries, exportVerification } from './routes/exports.js';
 
 const key = (method, path) => `${method.toUpperCase()} ${path}`;
 const staticRoutes = new Map([
@@ -55,6 +58,31 @@ export async function route(request,response) {
     if (actionMatch && method === 'POST' && actionMatch[2] === 'approve') return await approveUser(user,actionMatch[1],request,response);
     if (actionMatch && method === 'POST' && actionMatch[2] === 'suspend') return await suspendUser(user,actionMatch[1],request,response);
     if (actionMatch && method === 'POST' && actionMatch[2] === 'password') return await resetPassword(user,actionMatch[1],request,response);
+    if (pathname === '/api/flags' && method === 'GET') { requireRoles(user,['admin']); return await flags(user,url,response); }
+    const flagMatch=pathname.match(/^\/api\/flags\/([0-9a-f-]{36})\/resolve$/i);
+    if(flagMatch && method==='POST'){requireRoles(user,['admin']);return await resolveFlag(user,flagMatch[1],request,response);}
+    const entryEdit=pathname.match(/^\/api\/entries\/([0-9a-f-]{36})$/i);
+    if(entryEdit && method==='PATCH'){requireRoles(user,['admin']);return await updateEntry(user,entryEdit[1],request,response);}
+    if(pathname==='/api/verification' && method==='GET'){requireRoles(user,['admin']);return await verificationQueue(user,url,response);}
+    const verifyMatch=pathname.match(/^\/api\/verification\/([0-9a-f-]{36})$/i);
+    if(verifyMatch && method==='POST'){requireRoles(user,['admin']);return await setVerification(user,verifyMatch[1],request,response);}
+    if(pathname==='/api/verification/bulk' && method==='POST'){requireRoles(user,['admin']);return await bulkVerification(user,request,response);}
+    if(pathname==='/api/audit-log' && method==='GET'){requireRoles(user,['admin']);return await auditLog(user,url,response);}
+    if(pathname==='/api/settings' && method==='GET'){requireRoles(user,['admin']);return await settings(user,url,response);}
+    const settingMatch=pathname.match(/^\/api\/settings\/([a-z_]+)$/);
+    if(settingMatch && method==='PUT'){requireRoles(user,['admin']);return await updateSetting(user,settingMatch[1],request,response);}
+    if(pathname==='/api/imports' && method==='GET'){requireRoles(user,['admin']);return await importHistory(user,url,response);}
+    if(pathname==='/api/imports' && method==='POST'){requireRoles(user,['admin']);return await createImport(user,request,response);}
+    if(pathname==='/api/imports/dry-run' && method==='POST'){requireRoles(user,['admin']);return await dryRunImport(user,request,response);}
+    const importMatch=pathname.match(/^\/api\/imports\/([0-9a-f-]{36})\/batch$/i);
+    if(importMatch && method==='POST'){requireRoles(user,['admin']);return await importBatch(user,importMatch[1],request,response);}
+    if(pathname==='/api/places/aliases' && method==='GET'){requireRoles(user,['admin']);return await placeAliases(user,url,response);}
+    if(pathname==='/api/places/aliases' && method==='POST'){requireRoles(user,['admin']);return await saveAlias(user,request,response);}
+    if(pathname==='/api/exports/entries' && method==='GET'){requireRoles(user,['admin','ward_coordinator','mobilizer']);return await exportEntries(user,url,response);}
+    if(pathname==='/api/exports/verification' && method==='GET'){requireRoles(user,['admin']);return await exportVerification(user,url,response);}
+    if(pathname==='/api/network-contacts' && method==='GET'){requireRoles(user,['admin']);return await contacts(user,url,response);}
+    const contactMatch=pathname.match(/^\/api\/network-contacts\/([0-9a-f-]{36})$/i);
+    if(contactMatch && method==='PATCH'){requireRoles(user,['admin']);return await updateContact(user,contactMatch[1],request,response);}
     return json(response,404,{ error:'Not found.' });
   } catch (error) {
     const status = Number.isInteger(error?.status) ? error.status

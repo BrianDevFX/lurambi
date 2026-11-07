@@ -63,6 +63,10 @@ describe('Phase B API smoke', () => {
     process.env.JWT_SECRET = randomBytes(48).toString('hex');
     client = new Client({ connectionString: databaseUrl });
     await client.connect();
+    await client.query("DELETE FROM public.entries WHERE name='=Synthetic Imported Person'");
+    await client.query('DELETE FROM public.exports_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
+    await client.query('DELETE FROM public.imports WHERE created_by IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
+    await client.query('DELETE FROM public.audit_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
     await client.query('DELETE FROM public.duplicate_attempts WHERE mobilizer_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
     await client.query('DELETE FROM public.entries WHERE mobilizer_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
     await client.query('DELETE FROM public.users WHERE phone = ANY($1::text[])',[phones]);
@@ -96,6 +100,7 @@ describe('Phase B API smoke', () => {
         setHeader: (name,value) => res.setHeader(name,value),
         status(code) { res.statusCode=code; return this; },
         json(value) { res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(value)); },
+        end(value) { res.end(value); },
       };
       await route(req,response);
     });
@@ -107,13 +112,17 @@ describe('Phase B API smoke', () => {
     if (!enabled) return;
     await new Promise((resolve) => server?.close(resolve));
     if (client) {
+      await client.query("DELETE FROM public.entries WHERE name='=Synthetic Imported Person'");
+      await client.query('DELETE FROM public.exports_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
+      await client.query('DELETE FROM public.imports WHERE created_by IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
+      await client.query('DELETE FROM public.audit_log WHERE user_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.duplicate_attempts WHERE mobilizer_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.entries WHERE mobilizer_id IN (SELECT id FROM public.users WHERE phone = ANY($1::text[]))',[phones]);
       await client.query('DELETE FROM public.users WHERE phone = ANY($1::text[])',[phones]);
       await client.end();
     }
     await pool.end();
-  });
+  },30_000);
 
   it.skipIf(!enabled)('signs up, gates pending accounts, approves, captures, blocks duplicates and scopes lists', async () => {
     const adminLogin = await request('/api/login',{method:'POST',body:{phone:phones[0],password:passwords[0]}});
@@ -162,6 +171,34 @@ describe('Phase B API smoke', () => {
     expect(coordinatorList.result.entries.every((entry) => entry.ward_filed_id === wardA)).toBe(true);
     const edit = await request(`/api/entries/${captureId}`,{method:'PATCH',cookie:mobilizerCookie,body:{name:'Changed'}});
     const remove = await request(`/api/entries/${captureId}`,{method:'DELETE',cookie:mobilizerCookie});
-    expect(edit.response.status).toBe(404); expect(remove.response.status).toBe(404);
+    expect(edit.response.status).toBe(403); expect(remove.response.status).toBe(404);
+  },60_000);
+
+  it.skipIf(!enabled)('requires a reason for admin edits, writes audit records, records verification, and imports idempotently', async () => {
+    const noReason=await request(`/api/entries/${captureId}`,{method:'PATCH',cookie:adminCookie,body:{patch:{name:'Synthetic Edited Supporter'},reason:''}});
+    expect(noReason.response.status).toBe(400);
+    const changed=await request(`/api/entries/${captureId}`,{method:'PATCH',cookie:adminCookie,body:{patch:{name:'Synthetic Edited Supporter'},reason:'Corrected during synthetic test'}});
+    expect(changed.response.status).toBe(200);
+    const audit=await request('/api/audit-log',{cookie:adminCookie});
+    expect(audit.result.events.some((event)=>event.entity_id===captureId&&event.action==='update')).toBe(true);
+    const verification=await request(`/api/verification/${captureId}`,{method:'POST',cookie:adminCookie,body:{status:'verified',note:'Synthetic register check'}});
+    expect(verification.response.status).toBe(200);
+
+    const created=await request('/api/imports',{method:'POST',cookie:adminCookie,body:{file_name:'synthetic-phase-c.csv',import_type:'entries'}});
+    expect(created.response.status).toBe(201);
+    const batch={rows:[{row_hash:'phase-c-synthetic-row-0001',name:'=Synthetic Imported Person',phone:'0700000011',national_id:'3456789',ward_id:wardA,polling_centre_id:centreA,polling_station_id:stationA,support_level:'leaning'}]};
+    const beforeDryRun=await client.query("SELECT count(*)::int AS n FROM public.entries WHERE name='=Synthetic Imported Person'");
+    const dryRun=await request('/api/imports/dry-run',{method:'POST',cookie:adminCookie,body:{...batch,import_type:'entries'}});
+    expect(dryRun.response.status).toBe(200);expect(dryRun.result.dry_run).toBe(true);
+    const afterDryRun=await client.query("SELECT count(*)::int AS n FROM public.entries WHERE name='=Synthetic Imported Person'");
+    expect(afterDryRun.rows[0].n).toBe(beforeDryRun.rows[0].n);
+    const first=await request(`/api/imports/${created.result.import.id}/batch`,{method:'POST',cookie:adminCookie,body:batch});
+    const second=await request(`/api/imports/${created.result.import.id}/batch`,{method:'POST',cookie:adminCookie,body:batch});
+    expect(first.response.status).toBe(200);expect(first.result).toEqual(expect.objectContaining({imported:1}));
+    expect(second.response.status).toBe(200);expect(second.result.merged).toBe(1);
+    const exported=await fetch(`${baseUrl}/api/exports/entries?format=csv`,{headers:{cookie:adminCookie}});
+    expect(exported.status).toBe(200);expect(await exported.text()).toContain("'=Synthetic Imported Person");
+    const logged=await client.query("SELECT count(*)::int AS n FROM public.exports_log WHERE user_id=(SELECT id FROM public.users WHERE phone=$1) AND export_type='entries'",[phones[0]]);
+    expect(logged.rows[0].n).toBeGreaterThan(0);
   },60_000);
 });

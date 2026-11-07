@@ -28,6 +28,12 @@ a { color: #047857; }
 .bottom-tabs button, .role-tabs button { flex: 1; background: transparent; color: #475569; padding: .65rem .3rem; font-size: .78rem; }
 .bottom-tabs button.active, .role-tabs button.active { color: #047857; background: #ecfdf5; }
 .role-tabs { border-top: 0; border-bottom: 1px solid #e2e8f0; padding: .3rem 1rem; }
+.role-tabs { overflow-x: auto; justify-content: flex-start; }
+.role-tabs button { flex: 0 0 auto; white-space: nowrap; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.table-scroll table { border-collapse: collapse; min-width: 44rem; width: 100%; font-size: .82rem; }
+.table-scroll th, .table-scroll td { padding: .5rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 .search-row, .action-row, .filter-row, .reset-row { display: flex; align-items: end; gap: .6rem; }
 .search-row input, .reset-row input { flex: 1; }
 .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; }

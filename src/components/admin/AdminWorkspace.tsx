@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api/client.js';
+import { AdminTools } from './AdminTools';
 
 type User = { id: string; full_name: string; phone: string; national_id_masked: string | null; status: string; home_ward_name: string | null; referral_code: string | null };
 type Entry = { id: string; name: string; phone_e164: string | null; national_id_masked: string | null; ward_name: string; polling_centre_name: string | null; station_name: string | null; flags: string[]; captured_on: string };
@@ -7,10 +8,12 @@ type Props = { user: { full_name: string; role: string }; onSignOut: () => void 
 
 export function AdminWorkspace({ user, onSignOut }: Props) {
   const [tab,setTab] = useState('Mobilizers');
+  const adminTabs=['Mobilizers','Entries','Flags','Verification','Import/Export','Places','Network','Audit Log','Settings'];
+  const tabs=user.role==='admin'?adminTabs:['Mobilizers','Entries'];
   return <main className="workspace">
     <header className="topbar"><div><strong>Lurambi Field Platform</strong><small>{user.full_name} · {user.role === 'admin' ? 'Admin' : 'Ward Coordinator'}</small></div><button className="quiet-button" onClick={onSignOut}>Sign out</button></header>
-    <nav className="role-tabs"><button className={tab==='Mobilizers'?'active':''} onClick={() => setTab('Mobilizers')}>Mobilizers</button><button className={tab==='Entries'?'active':''} onClick={() => setTab('Entries')}>Entries</button></nav>
-    <section className="content">{tab === 'Mobilizers' ? <Mobilizers user={user}/> : <Entries/>}</section>
+    <nav className="role-tabs">{tabs.map(item=><button key={item} className={tab===item?'active':''} onClick={() => setTab(item)}>{item}</button>)}</nav>
+    <section className="content">{tab === 'Mobilizers' ? <Mobilizers user={user}/> : tab==='Entries' ? <Entries canEdit={user.role==='admin'}/> : <AdminTools tab={tab}/>}</section>
   </main>;
 }
 
@@ -47,8 +50,10 @@ function Mobilizers({ user }: { user: Props['user'] }) {
   </div>;
 }
 
-function Entries() {
+function Entries({canEdit}:{canEdit:boolean}) {
   const [rows,setRows] = useState<Entry[]>([]); const [error,setError] = useState('');
-  useEffect(() => { api('/api/entries?limit=200').then((data) => setRows(data.entries)).catch((cause) => setError(cause.message)); },[]);
-  return <div className="stack wide"><div><h1>Entries</h1><p className="muted">Read-only list.</p></div>{error && <p role="alert" className="error">{error}</p>}<ul className="entry-list panel">{rows.map((entry) => <li key={entry.id}><strong>{entry.name}</strong><span>{entry.phone_e164 || 'No phone'} · ID {entry.national_id_masked || 'Pending'}</span><small>{entry.ward_name} · {entry.polling_centre_name || 'No centre'} · {entry.station_name || 'No station'}</small>{entry.flags?.length > 0 && <span className="badges">{entry.flags.map((flag) => <em key={flag}>{flag.replaceAll('_',' ')}</em>)}</span>}</li>)}</ul></div>;
+  const load=()=>api('/api/entries?limit=200').then((data) => setRows(data.entries)).catch((cause) => setError(cause.message));
+  useEffect(() => { void load(); },[]);
+  async function edit(entry:Entry){const name=window.prompt('Update name',entry.name);if(!name||name===entry.name)return;const reason=window.prompt('Reason for this edit');if(!reason)return;try{await api(`/api/entries/${entry.id}`,{method:'PATCH',body:{patch:{name},reason}});await load();}catch(cause){setError((cause as Error).message);}}
+  return <div className="stack wide"><div><h1>Entries</h1><p className="muted">{canEdit?'Admin changes require a reason.':'Read-only list.'}</p></div>{error && <p role="alert" className="error">{error}</p>}<ul className="entry-list panel">{rows.map((entry) => <li key={entry.id}><strong>{entry.name}</strong><span>{entry.phone_e164 || 'No phone'} · ID {entry.national_id_masked || 'Pending'}</span><small>{entry.ward_name} · {entry.polling_centre_name || 'No centre'} · {entry.station_name || 'No station'}</small>{entry.flags?.length > 0 && <span className="badges">{entry.flags.map((flag) => <em key={flag}>{flag.replaceAll('_',' ')}</em>)}</span>}{canEdit&&<button onClick={()=>void edit(entry)}>Edit name</button>}</li>)}</ul></div>;
 }
