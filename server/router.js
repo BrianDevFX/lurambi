@@ -4,7 +4,7 @@ import { ApiError, json } from './http.js';
 import { login, logout, me, signup, signupLocations } from './routes/auth.js';
 import { captureEntry, consentPolicy, listEntries, listMyEntries, searchEntries } from './routes/entries.js';
 import { createCentre, createStation, listCentres, listStations, listWards, renameCentre, renameStation } from './routes/places.js';
-import { approveUser, listUsers, pendingUsers, resetPassword, suspendUser } from './routes/users.js';
+import { approveUser, listUsers, pendingUsers, resetPassword, suspendUser, updateOwnHomeWard } from './routes/users.js';
 import { auditLog, bulkVerification, contacts, flags, resolveFlag, setVerification, settings, updateContact, updateEntry, updateSetting, verificationQueue } from './routes/admin.js';
 import { createImport, dryRunImport, importBatch, importHistory, placeAliases, saveAlias } from './routes/imports.js';
 import { exportEntries, exportVerification } from './routes/exports.js';
@@ -59,6 +59,7 @@ export async function route(request,response) {
     const user = await currentUser(request);
     const handler = staticRoutes.get(key(method,pathname));
     if (handler) return await handler(request,user,url,response);
+    if (pathname === '/api/profile/home-ward' && method === 'PATCH') { requireRoles(user,['mobilizer']); return await updateOwnHomeWard(user,request,response); }
     const actionMatch = pathname.match(/^\/api\/users\/([0-9a-f-]{36})\/(approve|suspend|password)$/i);
     if (actionMatch && method === 'POST' && actionMatch[2] === 'approve') return await approveUser(user,actionMatch[1],request,response);
     if (actionMatch && method === 'POST' && actionMatch[2] === 'suspend') return await suspendUser(user,actionMatch[1],request,response);

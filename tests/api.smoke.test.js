@@ -138,6 +138,19 @@ describe('Phase B API smoke', () => {
     coordinatorCookie=coordinatorLogin.cookie;
     const mobLogin = await request('/api/login',{method:'POST',body:{phone:phones[2],password:passwords[2]}});
     mobilizerCookie=mobLogin.cookie;
+    const coordinatorWardChange=await request('/api/profile/home-ward',{method:'PATCH',cookie:coordinatorCookie,body:{home_ward_id:wardB}});
+    expect(coordinatorWardChange.response.status).toBe(403);
+    const invalidWardChange=await request('/api/profile/home-ward',{method:'PATCH',cookie:mobilizerCookie,body:{home_ward_id:crypto.randomUUID()}});
+    expect(invalidWardChange.response.status).toBe(400);
+    const changedWard=await request('/api/profile/home-ward',{method:'PATCH',cookie:mobilizerCookie,body:{home_ward_id:wardB}});
+    expect(changedWard.response.status).toBe(200);
+    expect(changedWard.result.user.home_ward_id).toBe(wardB);
+    const refreshedProfile=await request('/api/me',{cookie:mobilizerCookie});
+    expect(refreshedProfile.result.user.home_ward_id).toBe(wardB);
+    const stationReset=await client.query('SELECT home_polling_station_id FROM public.users WHERE id=$1',[mobilizerId]);
+    expect(stationReset.rows[0].home_polling_station_id).toBeNull();
+    const restoredWard=await request('/api/profile/home-ward',{method:'PATCH',cookie:mobilizerCookie,body:{home_ward_id:wardA}});
+    expect(restoredWard.response.status).toBe(200);
     const secondLogin = await request('/api/login',{method:'POST',body:{phone:phones[3],password:passwords[3]}});
     secondMobilizerCookie=secondLogin.cookie;
     const pendingLogin = await request('/api/login',{method:'POST',body:{phone:phones[4],password:passwords[4]}});
@@ -163,6 +176,7 @@ describe('Phase B API smoke', () => {
     expect(missingConsent.response.status).toBe(400);
     const capture = await request('/api/entries',{method:'POST',cookie:mobilizerCookie,body:entryBody});
     expect(capture.response.status).toBe(201); expect(capture.result.entry.national_id_masked).toBeTruthy();
+    expect(capture.result.entry.flags).not.toContain('WARD_MISMATCH');
     expect(JSON.stringify(capture.result)).not.toContain('1234567'); captureId=capture.result.entry.id;
     const duplicate = await request('/api/entries',{method:'POST',cookie:mobilizerCookie,body:{...entryBody,client_request_id:crypto.randomUUID(),name:'Synthetic Supporter Duplicate'}});
     expect(duplicate.response.status).toBe(409); expect(duplicate.result.duplicate).toBe(true);

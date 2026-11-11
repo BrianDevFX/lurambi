@@ -1,8 +1,26 @@
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
 import { pool, withActor } from '../db.js';
-import { hashPassword } from '../auth.js';
+import { hashPassword, requireRoles } from '../auth.js';
 import { ApiError, json, readJson } from '../http.js';
+
+const homeWardSchema = z.object({ home_ward_id: z.string().uuid() });
+
+export async function updateOwnHomeWard(user, request, response) {
+  requireRoles(user, ['mobilizer']);
+  const parsed = homeWardSchema.safeParse(await readJson(request));
+  if (!parsed.success) throw new ApiError(400, 'Choose a valid home ward.');
+  const { rows } = await pool.query(
+    `UPDATE public.users AS u
+        SET home_ward_id=w.id, home_polling_station_id=NULL, updated_at=now()
+       FROM public.wards AS w
+      WHERE u.id=$1 AND w.id=$2 AND u.role='mobilizer'
+      RETURNING u.home_ward_id`,
+    [user.id, parsed.data.home_ward_id],
+  );
+  if (!rows[0]) throw new ApiError(400, 'Choose a valid home ward.');
+  return json(response, 200, { user: { id: user.id, home_ward_id: rows[0].home_ward_id } });
+}
 
 const passwordSchema = z.object({ password: z.string().min(12).max(128) });
 const referralAlphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';

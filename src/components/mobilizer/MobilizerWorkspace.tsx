@@ -11,13 +11,14 @@ const tabs = ['Search/Add','My List','My Link','Profile'] as const;
 
 export function MobilizerWorkspace({ user, onSignOut }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Search/Add');
+  const [currentUser, setCurrentUser] = useState(user);
   return <main className="workspace">
     <header className="topbar"><div><strong>Lurambi Field Platform</strong><small>{user.full_name} · Mobilizer</small></div><button className="quiet-button" onClick={onSignOut}>Sign out</button></header>
     <section className="content">
-      {tab === 'Search/Add' && <Capture user={user}/>}
+      {tab === 'Search/Add' && <Capture user={currentUser}/>}
       {tab === 'My List' && <MyList/>}
-      {tab === 'My Link' && <MyLink user={user}/>}
-      {tab === 'Profile' && <Profile user={user}/>}
+      {tab === 'My Link' && <MyLink user={currentUser}/>}
+      {tab === 'Profile' && <Profile user={currentUser} onHomeWardChanged={(home_ward_id)=>setCurrentUser(current=>({...current,home_ward_id}))}/>}
     </section>
     <nav className="bottom-tabs" aria-label="Mobilizer navigation">{tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{item}</button>)}</nav>
   </main>;
@@ -117,7 +118,21 @@ function MyLink({ user }: { user: User }) {
   return <div className="stack panel link-panel"><div><h1>My link</h1><p className="muted">Share this link to invite supporters.</p></div>{link ? <><code>{link}</code>{qr && <img className="qr" src={qr} alt="Referral QR code"/>}<div className="action-row"><button onClick={() => navigator.clipboard.writeText(link)}>Copy link</button><a className="button-link" href={`https://wa.me/?text=${encodeURIComponent(`Join our supporter list: ${link}`)}`} target="_blank" rel="noreferrer">Share</a></div></> : <p className="muted">Your link will appear after approval.</p>}{error && <p className="error">{error}</p>}</div>;
 }
 
-function Profile({ user }: { user: User }) {
-  const [stats,setStats]=useState<any>(null);useEffect(()=>{api('/api/dashboard').then(setStats).catch(()=>undefined);},[]);
-  return <section className="panel stack"><h1>Profile</h1><p><strong>{user.full_name}</strong></p><p>{user.phone}</p><p>ID {user.national_id_masked || 'Not available'}</p><p>Status: {user.status}</p>{stats&&<section><h2>My activity</h2><p>Entries: {stats.data_completeness?.total||0} · ID recorded: {stats.data_completeness?.id_present||0} · Phone recorded: {stats.data_completeness?.phone_present||0}</p></section>}</section>;
+function Profile({ user, onHomeWardChanged }: { user: User; onHomeWardChanged: (homeWardId:string)=>void }) {
+  const [stats,setStats]=useState<any>(null);
+  const [wards,setWards]=useState<Place[]>([]);
+  const [homeWardId,setHomeWardId]=useState(user.home_ward_id||'');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const [message,setMessage]=useState('');
+  useEffect(()=>{api('/api/dashboard').then(setStats).catch(()=>undefined);api('/api/signup/places').then(data=>setWards(data.wards)).catch(cause=>setError(cause.message));},[]);
+  async function saveHomeWard(event:FormEvent){
+    event.preventDefault();setBusy(true);setError('');setMessage('');
+    try{const result=await api('/api/profile/home-ward',{method:'PATCH',body:{home_ward_id:homeWardId}});onHomeWardChanged(result.user.home_ward_id);setMessage('Home ward updated. New captures will use this ward for mismatch checks. Existing entries are unchanged.');}
+    catch(cause){setError(cause instanceof Error?cause.message:'Could not update home ward.');}
+    finally{setBusy(false);}
+  }
+  return <section className="panel stack"><h1>Profile</h1><p><strong>{user.full_name}</strong></p><p>{user.phone}</p><p>ID {user.national_id_masked || 'Not available'}</p><p>Status: {user.status}</p>
+    <form className="stack" onSubmit={saveHomeWard}><h2>Home ward</h2><p className="muted">Your home ward is compared with the ward selected for a capture. Update it if your assigned ward has changed.</p><label>Ward<select required value={homeWardId} onChange={event=>setHomeWardId(event.target.value)}><option value="">Select home ward</option>{wards.map(ward=><option key={ward.id} value={ward.id}>{ward.name}</option>)}</select></label><button disabled={busy||!homeWardId||homeWardId===user.home_ward_id}>{busy?'Saving…':'Save home ward'}</button>{message&&<p role="status" className="success">{message}</p>}{error&&<p role="alert" className="error">{error}</p>}</form>
+    {stats&&<section><h2>My activity</h2><p>Entries: {stats.data_completeness?.total||0} · ID recorded: {stats.data_completeness?.id_present||0} · Phone recorded: {stats.data_completeness?.phone_present||0}</p></section>}</section>;
 }
