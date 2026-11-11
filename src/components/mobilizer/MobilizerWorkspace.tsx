@@ -93,10 +93,10 @@ function Capture({ user }: { user: User }) {
       <label>Notes<textarea rows={3} maxLength={2000} value={form.notes} onChange={(e) => update('notes',e.target.value)}/></label>
       {consent && <label className="consent"><input required type="checkbox" checked={form.consent} onChange={(e) => update('consent',e.target.checked)}/><span>{consent.text} <a href="/privacy" target="_blank" rel="noreferrer">Privacy Notice</a></span></label>}
       {error && <p role="alert" className="error">{error}</p>}
-      {result && <p role="status" className="success">Saved. {result.flags?.length ? `Flags: ${result.flags.join(', ')}` : 'No flags.'}</p>}
       {offlineResults.filter(item=>item.state!=='saved').map(item=><p key={item.client_request_id} role="status" className={item.state==='error'?'error':'muted'}>{item.state}: {item.message}</p>)}
       <button disabled={busy || !consent || !form.consent}>{busy ? 'Saving…' : 'Save entry'}</button>
     </form>}
+    {result && <div className="save-confirmation" role="status" aria-live="polite"><span className="save-confirmation-icon" aria-hidden="true">✓</span><div><strong>Entry saved</strong><p>{result.flags?.length ? `Review flags: ${result.flags.join(', ')}` : 'Supporter added to your list.'}</p></div><button type="button" className="save-confirmation-close" aria-label="Dismiss saved notification" onClick={()=>setResult(null)}>×</button></div>}
     {error && !searched && <p role="alert" className="error">{error}</p>}
   </div>;
 }

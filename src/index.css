@@ -74,6 +74,12 @@ legend { padding: 0 .3rem; color: #475569; font-size: .85rem; }
 .admin-workspace .table-scroll th, .admin-workspace .table-scroll td { overflow-wrap: anywhere; }
 .admin-workspace details > summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; }
 
+.save-confirmation { position: fixed; z-index: 5; top: 5rem; left: 50%; transform: translateX(-50%); width: min(30rem, calc(100vw - 1.25rem)); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: .75rem; padding: 1rem; border: 1px solid #047857; border-radius: .75rem; background: #ecfdf5; color: #064e3b; box-shadow: 0 12px 32px rgb(15 23 42 / 24%); }
+.save-confirmation-icon { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: #047857; color: #fff; font-size: 1.25rem; font-weight: 800; }
+.save-confirmation strong { display: block; font-size: 1rem; }
+.save-confirmation p { margin-top: .2rem; color: #065f46; overflow-wrap: anywhere; }
+.save-confirmation-close { min-width: 2.5rem; min-height: 2.5rem; padding: .2rem; background: transparent; color: #064e3b; font-size: 1.5rem; line-height: 1; }
+
 @media (max-width: 760px) {
   .admin-workspace { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
   .admin-workspace .role-tabs { display: none; }
@@ -91,4 +97,5 @@ legend { padding: 0 .3rem; color: #475569; font-size: .85rem; }
   .admin-workspace .topbar strong { font-size: .9rem; }
   .admin-workspace .topbar small { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .admin-workspace .admin-mobile-nav { top: 3.6rem; }
+  .save-confirmation { top: 4rem; }
 }
